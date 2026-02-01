@@ -32,44 +32,56 @@
     (t terminal-ansi-color-number)))
 
 (defun colorize (regexp input)
+  "Basic grep-like functionality with colorized output where each distinct match gets its own color."
   ;; determine the input source (stdin vs a file) and close it safely where
-  ;; applicable
+  ;; applicable.
   (let ((input-source (if (equal input *standard-input*)
                           input
                           (open input))))
     (unwind-protect
         (progn
-          ;; process one line at a time
-          (do ((line (read-line input-source nil :eof) (read-line input-source nil :eof))
+          (do ((line (read-line input-source nil nil)
+                     (read-line input-source nil nil))
                (scanner (cl-ppcre:create-scanner regexp :single-line-mode t))
-               (num-unique-ids-seen-so-far 0)
-               (color-assignments (make-hash-table :test #'equal))
-               id
-               ;; inserting <Esc> here to consolidate ANSI escape sequence code
-               (replacement-format-string (format nil "~C[38;5;~~am~~a~C[0m" #\Esc #\Esc))
-               replacement-string)
-              ((eql line :eof))
-            ;; extract the ID from the line
-            (setf id (cl-ppcre:scan-to-strings scanner line))
-            ;; only print lines that match the regex (to mimic grep)
-            (when id
-              ;; determine whether this ID has been seen before and, if not, assign it
-              ;; an 8-bit ANSI terminal color
-              (multiple-value-bind (value present-p) (gethash id color-assignments)
-                (declare (ignore value))
-                (when (not present-p)
-                  (setf
-                    (gethash id color-assignments)
-                    (determine-appropriate-terminal-color (incf num-unique-ids-seen-so-far)))))
-              ;; fill out the format string with the 8-bit ANSI terminal color and ID
-              (setf replacement-string
-                    (format nil replacement-format-string
-                            (gethash id color-assignments)
-                            id))
-              ;; insert the terminal escape sequence into the string and print
-              ;; wrap in ignore-errors in case a downstream process causes
-              ;; a broken pipe (Ex. piping into the head command).
-              (ignore-errors (format t "~a~%" (cl-ppcre:regex-replace scanner line replacement-string))))))
+               (num-unique-ids-seen-so-far 0) ;; assigns color.
+               (color-assignments (make-hash-table :test #'equal)))
+              ((null line))
+            (cl-ppcre:do-scans (match-start match-end reg-starts reg-ends scanner line)
+              ;; only print lines that match the regex.
+              (when match-start
+                (let ((matched-text (make-array (- match-end match-start)
+                                      :element-type 'character
+                                      :displaced-to line
+                                      :displaced-index-offset match-start)))
+                  ;; determine whether matched-text has been seen before,
+                  ;; assigning it an ANSI 8-bit terminal color if not.
+                  (multiple-value-bind (color-id present-p) (gethash matched-text color-assignments)
+                    (when (not present-p)
+                      (incf num-unique-ids-seen-so-far)
+                      (setf (gethash matched-text color-assignments)
+                            (determine-appropriate-terminal-color num-unique-ids-seen-so-far)
+                            color-id
+                            (determine-appropriate-terminal-color num-unique-ids-seen-so-far)))
+                    ;; if we encounter an error writing to *standard-output*,
+                    ;; a downstream process probably broke a pipe, so there
+                    ;; is nothing left for this function to do.
+                    (handler-case
+                        (progn
+                          ;; 1. print the part of the string before the match.
+                          ;; this will error if a downstream process broke the pipe,
+                          ;; so we don't have to worry about restoring the terminal's settings
+                          (write-string line *standard-output* :start 0 :end match-start)
+                          ;; 2. print the opening escape sequence.
+                          (format *standard-output* "~C[38;5;~am" #\Esc color-id)
+                          ;; 3. print the matched text.
+                          (write-string line *standard-output* :start match-start :end match-end)
+                          ;; 4. print the closing escape sequence.
+                          (format *standard-output* "~C[0m" #\Esc)
+                          ;; 5. print the rest of the string.
+                          (write-string line *standard-output* :start match-end)
+                          ;; 6. end the line.
+                          (terpri))
+                      (error () (return-from colorize)))))))))
       ;; a stream that is not *standard-input*
       (when (and input-source (not (equal input-source *standard-input*)))
         (close input-source)))))
