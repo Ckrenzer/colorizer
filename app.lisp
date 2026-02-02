@@ -48,9 +48,9 @@
               ;; only print lines that match the regex.
               (when match-start
                 (let ((matched-text (make-array (- match-end match-start)
-                                      :element-type 'character
-                                      :displaced-to line
-                                      :displaced-index-offset match-start)))
+                                                :element-type 'character
+                                                :displaced-to line
+                                                :displaced-index-offset match-start)))
                   ;; determine whether matched-text has been seen before,
                   ;; assigning it an ANSI 8-bit terminal color if not.
                   (multiple-value-bind (color-id present-p) (gethash matched-text color-assignments)
@@ -60,14 +60,15 @@
                             (determine-appropriate-terminal-color num-unique-ids-seen-so-far)
                             color-id
                             (determine-appropriate-terminal-color num-unique-ids-seen-so-far)))
-                    ;; if we encounter an error writing to *standard-output*,
-                    ;; a downstream process probably broke a pipe, so there
-                    ;; is nothing left for this function to do.
                     (handler-case
                         (progn
                           ;; 1. print the part of the string before the match.
-                          ;; this will error if a downstream process broke the pipe,
-                          ;; so we don't have to worry about restoring the terminal's settings
+                          ;;    this call will error if a downstream process
+                          ;;    broke a pipe, so we won't have to worry about
+                          ;;    restoring the terminal's settings when broken
+                          ;;    pipes inevitably appear since the error
+                          ;;    is signaled before any escape sequences are
+                          ;;    printed.
                           (write-string line *standard-output* :start 0 :end match-start)
                           ;; 2. print the opening escape sequence.
                           (format *standard-output* "~C[38;5;~am" #\Esc color-id)
@@ -79,6 +80,9 @@
                           (write-string line *standard-output* :start match-end)
                           ;; 6. end the line.
                           (terpri))
+                      ;; if we encounter an error writing to *standard-output*,
+                      ;; a downstream process probably broke a pipe, so there
+                      ;; is nothing left for this function to do.
                       (error () (return-from colorize)))))))))
       ;; a stream that is not *standard-input*
       (when (and input-source (not (equal input-source *standard-input*)))

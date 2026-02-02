@@ -4,17 +4,16 @@ A grep-like utility that uses ANSI escape sequences to colorize matched text, pr
 # Building
 This requires you to have Quicklisp installed.
 
-Run the following command from the root of the repo:
+Run the following command from the root of the repo, and the dynamically-linked `colorizer` executable will be produced in this directory:
 ```{sh}
 make build
 ```
-And the dynamically-linked `colorizer` executable will be produced in this directory.
 
 # Example Usage
 The tool works like `grep` with Perl-compatible regular expressions:
 ```{sh}
 printf 'qxz-35 Good morning!\nqxz-14 The sun is up!\nqxz-35 It sure is!\n' |\
-    ./colorizer -e '^[a-z]+-[0-9]+'
+    colorizer -e '^[a-z]+-[0-9]+'
 ```
 And it accepts the `-f` flag to read a file instead piping from stdin.
 
