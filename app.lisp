@@ -1,5 +1,3 @@
-;; should you allow the tool to parse arbitrarily many files?
-;;      if not, then you will need to do something like cat all of them together.
 (ql:quickload :cl-ppcre)
 (ql:quickload :uiop)
 (ql:quickload :clingon)
