@@ -1,1 +1,0 @@
-sbcl --load app.lisp
